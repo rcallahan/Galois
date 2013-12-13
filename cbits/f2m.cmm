@@ -1,6 +1,19 @@
 #include "Cmm.h"
 
+#if (__GLASGOW_HASKELL__ >= 707)
+#define GHCHEAD
+#endif
+
 #define tab(x) W_[tab_ + WDS(x)]
+#define rdp(x) W_[rba + WDS(x)]
+#define adp(x) W_[aba + WDS(x)]
+#define pdp(x) W_[pba + WDS(x)]
+#define bdp(x) W_[bba + WDS(x)]
+#define xdp(x) W_[xba + WDS(x)]
+#define cdp(x) W_[cba + WDS(x)]
+#define udp(x) W_[uba + WDS(x)]
+#define vdp(x) W_[vba + WDS(x)]
+#define BTS(x) (SIZEOF_W * 8 * (x))
 
 #define SQR_tb(w) TO_W_(bits8[sqr_tb+(w)])
 section "rodata" {
@@ -8,14 +21,19 @@ section "rodata" {
     // Array literals not supported in cmm at this time
 }
 
-cmm_lzcnt {
+#ifdef GHCHEAD
+cmm_lzcnt (W_ a) {
     /* Placeholder for lzcnt or bsr */
+    return(~a);
+}
+#else
+cmm_lzcnt {
     RET_N(~R1);
 }
+#endif
 
 #if SIZEOF_W == 4
 #define SIZEOF_BN 20
-#define BTS(x) (32 * (x))
 
 #define SQR1(w) \
     SQR_tb((w) >> 28 & 0xF) << 24 | SQR_tb((w) >> 24 & 0xF) << 16 | \
@@ -24,15 +42,19 @@ cmm_lzcnt {
     SQR_tb((w) >> 12 & 0xF) << 24 | SQR_tb((w) >>  8 & 0xF) << 16 | \
     SQR_tb((w) >>  4 & 0xF) <<  8 | SQR_tb((w)       & 0xF)
 
+#ifdef GHCHEAD
+gf2m_cmm_mul1x1 (W_ a, W_ b) {
+#else
 gf2m_cmm_mul1x1 {
     W_ a, b;
     a = R1; b = R2;
+#endif
     W_ r1, r0, h, l, s;
     W_ a1, a2, a4;
     W_ tab_, top2b;
 #ifdef GHCHEAD
-    MAYBE_GC(gf2m_cmm_mul1x1);
-    STK_CHK_GEN(WDS(8), gf2m_cmm_mul1x1);
+    MAYBE_GC_N(gf2m_cmm_mul1x1, a & b);
+    STK_CHK_GEN_N(WDS(8));
 #else
     MAYBE_GC(NO_PTRS, gf2m_cmm_mul1x1);
     STK_CHK_GEN(WDS(8), NO_PTRS, gf2m_cmm_mul1x1);
@@ -57,7 +79,7 @@ gf2m_cmm_mul1x1 {
     s = tab(b >> 27 & 0x7); l ^= s << 27; h ^= s >>  5;
     s = tab(b >> 30      ); l ^= s << 30; h ^= s >>  2;
 
-    /* compensate for the top two bits of a */
+    // compensate for the top two bits of a
 
     if (top2b & 01) { l ^= b << 30; h ^= b >> 2; } 
     if (top2b & 02) { l ^= b << 31; h ^= b >> 1; } 
@@ -69,7 +91,6 @@ gf2m_cmm_mul1x1 {
 #endif
 }
 #elif SIZEOF_W == 8
-#define BTS(x) (64 * (x))
 
 #define SQR1(w) \
     SQR_tb((w) >> 60 & 0xF) << 56 | SQR_tb((w) >> 56 & 0xF) << 48 | \
@@ -82,16 +103,20 @@ gf2m_cmm_mul1x1 {
     SQR_tb((w) >> 12 & 0xF) << 24 | SQR_tb((w) >> 8 & 0xF) << 16  | \
     SQR_tb((w) >> 4 & 0xF) << 8   | SQR_tb((w) & 0xF)
 
+#ifdef GHCHEAD
+gf2m_cmm_mul1x1 (W_ a, W_ b) {
+#else
 gf2m_cmm_mul1x1 {
     W_ a, b;
     a = R1; b = R2;
+#endif
     W_ h, l, s;
     W_ a1, a2, a4, a8;
     W_ tab_, top3b;
 
 #ifdef GHCHEAD
-    MAYBE_GC(gf2m_cmm_mul1x1);
-    STK_CHK_GEN(WDS(16), gf2m_cmm_mul1x1);
+    MAYBE_GC_N(gf2m_cmm_mul1x1, a & b);
+    STK_CHK_GEN_N(WDS(16));
 #else
     MAYBE_GC(NO_PTRS, gf2m_cmm_mul1x1);
     STK_CHK_GEN(WDS(16), NO_PTRS, gf2m_cmm_mul1x1);
@@ -123,7 +148,7 @@ gf2m_cmm_mul1x1 {
     s = tab(b >> 56 & 0xF); l = l ^ (s << 56); h = h ^ (s >> 8);
     s = tab(b >> 60 ); l = l ^ (s << 60); h = h ^ (s >> 4);
 #undef tab
-    /* compensate for the top three bits of a */
+    // compensate for the top three bits of a
 
     if (top3b & 1 > 0) { l = l ^ (b << 61); h = h ^ (b >> 3); }
     if (top3b & 2 > 0) { l = l ^ (b << 62); h = h ^ (b >> 2); }
@@ -137,15 +162,18 @@ gf2m_cmm_mul1x1 {
 }
 
 #endif
-
+#ifdef GHCHEAD
+gf2m_cmm_sqr (W_ asz, P_ aba) {
+#else
 gf2m_cmm_sqr
 {
     W_ asz, aba;
     asz = R1; aba = R2;
+#endif
     W_ rsz, r, rba, i;
     rsz = asz * 2;
 #ifdef GHCHEAD
-    ALLOC_PRIM(SIZEOF_StgArrWords + WDS(rsz));
+    ALLOC_PRIM_P(SIZEOF_StgArrWords + WDS(rsz), gf2m_cmm_sqr, aba);
 #else
     ALLOC_PRIM(SIZEOF_StgArrWords + WDS(rsz), R2_PTR, gf2m_cmm_sqr);
 #endif
@@ -155,8 +183,6 @@ gf2m_cmm_sqr
 
     rba = BYTE_ARR_CTS(r);
     aba = BYTE_ARR_CTS(aba);
-#define rdp(x) W_[rba + WDS(x)]
-#define adp(x) W_[aba + WDS(x)]
     
     i = 0;
     for:
@@ -174,21 +200,23 @@ gf2m_cmm_sqr
 #endif
 }
 
-gf2m_cmm_mod {
-    W_ rsz, r, asz, aba, j, k, psz, pba;
-    asz = R1;
 #ifdef GHCHEAD
-    ALLOC_PRIM(SIZEOF_StgArrWords + WDS(asz));
+gf2m_cmm_mod (W_ asz, P_ aba, P_ pba) {
+    ALLOC_PRIM_P(SIZEOF_StgArrWords + WDS(asz), gf2m_cmm_mod, aba & pba);
 #else
+gf2m_cmm_mod {
+    W_ asz, aba, pba;
+    asz = R1; aba = R2; pba = R3;
     ALLOC_PRIM(SIZEOF_StgArrWords + WDS(asz), R2_PTR & R3_PTR, gf2m_cmm_mod);
 #endif
+    W_ rsz, r, j, k, psz;
     r = Hp - SIZEOF_StgArrWords - WDS(asz-1);
     SET_HDR(r, stg_ARR_WORDS_info, CCCS);
-    StgArrWords_bytes(r) = WDS(rsz);
+    StgArrWords_bytes(r) = WDS(asz);
 
-    psz = StgArrWords_bytes(R3)/WDS(1);
-    aba = BYTE_ARR_CTS(R2);
-    pba = BYTE_ARR_CTS(R3);
+    psz = StgArrWords_bytes(pba)/WDS(1);
+    aba = BYTE_ARR_CTS(aba);
+    pba = BYTE_ARR_CTS(pba);
     r = BYTE_ARR_CTS(r);
 
     j = 0;
@@ -268,7 +296,7 @@ gf2m_cmm_mod {
 #undef z
 #undef p
 #ifdef GHCHEAD
-    return (j+1, r - SIZEOF_StgArrWords);
+    return(j+1, r-SIZEOF_StgArrWords);
 #else
     RET_NP(j + 1, r - SIZEOF_StgArrWords);
 #endif
@@ -278,44 +306,39 @@ gf2m_cmm_mod {
 SET_HDR(p, stg_ARR_WORDS_info, CCCS);   \
 StgArrWords_bytes(p) = size;
 
-gf2m_cmm_div {
-    W_ r, asz, aba, xsz, xba, psz, pba; // inputs and outputs
-    W_ bba, cba, uba, vba; // tmp integers
-    /* a and p should have top correct */
-    W_ top, tmp, tmp2;
-    W_ r;
-    top = R5;
-    tmp = WDS(top);
 #ifdef GHCHEAD
-    ALLOC_PRIM(SIZEOF_StgArrWords + tmp);
+gf2m_cmm_div (W_ xsz, P_ xba, W_ asz, P_ aba, W_ top, P_ pba) {
+    W_ tmp;
+    tmp = WDS(top);
+    ALLOC_PRIM_P(SIZEOF_StgArrWords + tmp, gf2m_cmm_div, xba & aba & pba );
+    pba = BYTE_ARR_CTS(pba);
+    aba = BYTE_ARR_CTS(aba);
+    xba = BYTE_ARR_CTS(xba);
 #else
+gf2m_cmm_div {
+    W_ asz, aba, xsz, xba, top, pba; // inputs and outputs
+    xsz = R1; xba = R2; asz = R3; aba = R4; top = R5; pba = R6;
+    W_ tmp;
+    tmp = WDS(top);
     ALLOC_PRIM(SIZEOF_StgArrWords + tmp, R2_PTR & R4_PTR & R6_PTR, gf2m_cmm_div);
 #endif
+    pba = BYTE_ARR_CTS(R6);
+    aba = BYTE_ARR_CTS(R4);
+    xba = BYTE_ARR_CTS(R2);
+    W_ r, bba, cba, uba, vba, tmp2;
     r = Hp - SIZEOF_StgArrWords - tmp + WDS(1);
     SETUP(r,tmp);
 #ifdef GHCHEAD
-    MAYBE_GC(gf2m_cmm_div);
-    STK_CHK_GEN(3 * tmp, gf2m_cmm_div);
+    MAYBE_GC_N(gf2m_cmm_div, R2_PTR & R4_PTR & R6_PTR);//gf2m_cmm_div);
+    STK_CHK_GEN_N(3 * tmp);
 #else
     MAYBE_GC(R2_PTR & R4_PTR & R6_PTR, gf2m_cmm_div);
     STK_CHK_GEN(3 * tmp, R2_PTR & R4_PTR & R6_PTR, gf2m_cmm_div);
 #endif
-    asz = R3;
-    pba = BYTE_ARR_CTS(R6);
-    aba = BYTE_ARR_CTS(R4);
-    xsz = R1;
-    xba = BYTE_ARR_CTS(R2);
     cba = Sp - tmp; uba = cba - tmp; vba = uba - tmp;
     bba = BYTE_ARR_CTS(r);
 
     W_ i, ubits, vbits;
-
-#define pdp(x) W_[pba+WDS(x)]
-#define bdp(x) W_[bba+WDS(x)]
-#define xdp(x) W_[xba+WDS(x)]
-#define cdp(x) W_[cba+WDS(x)]
-#define udp(x) W_[uba+WDS(x)]
-#define vdp(x) W_[vba+WDS(x)]
 
     i = 0;
     zero_loop:
@@ -334,7 +357,7 @@ gf2m_cmm_div {
     i = top - 1;
     vbitsize:
     if (i >= 0) {
-        /* The following instruction is a placeholder for lzcnt or bsr */
+        // The following instruction is a placeholder for lzcnt or bsr
         tmp = ~vdp(i);
         vbits = vbits + tmp;
         if (tmp == BTS(1)) {
@@ -348,7 +371,7 @@ gf2m_cmm_div {
     i = top - 1;
     ubitloop:
     if (i >= 0) {
-        /* The following instruction is a placeholder for lzcnt or bsr */
+        // The following instruction is a placeholder for lzcnt or bsr
         tmp = ~udp(i);
         ubits = ubits + tmp;
         if (tmp == BTS(1)) {
