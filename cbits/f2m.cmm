@@ -8,6 +8,10 @@ section "rodata" {
     // Array literals not supported in cmm at this time
 }
 
+cmm_lzcnt {
+    /* Placeholder for lzcnt or bsr */
+    RET_N(~R1);
+}
 
 #if SIZEOF_W == 4
 #define SIZEOF_BN 20
@@ -21,13 +25,18 @@ section "rodata" {
     SQR_tb((w) >>  4 & 0xF) <<  8 | SQR_tb((w)       & 0xF)
 
 gf2m_cmm_mul1x1 {
-static void bn_GF2m_mul_1x1(BN_ULONG *r1, BN_ULONG *r0, const BN_ULONG a, const BN_ULONG b)
-    W_ r1, r0, a, b, h, l, s;
+    W_ a, b;
     a = R1; b = R2;
+    W_ r1, r0, h, l, s;
     W_ a1, a2, a4;
     W_ tab_, top2b;
+#ifdef GHCHEAD
+    MAYBE_GC(gf2m_cmm_mul1x1);
+    STK_CHK_GEN(WDS(8), gf2m_cmm_mul1x1);
+#else
     MAYBE_GC(NO_PTRS, gf2m_cmm_mul1x1);
     STK_CHK_GEN(WDS(8), NO_PTRS, gf2m_cmm_mul1x1);
+#endif
     tab_ = Sp - 16 * SIZEOF_W;
     top2b = a >> 30;
 
@@ -53,7 +62,11 @@ static void bn_GF2m_mul_1x1(BN_ULONG *r1, BN_ULONG *r0, const BN_ULONG a, const 
     if (top2b & 01) { l ^= b << 30; h ^= b >> 2; } 
     if (top2b & 02) { l ^= b << 31; h ^= b >> 1; } 
 
+#ifdef GHCHEAD
+    return (h, l);
+#else
     RET_NN(h,l);
+#endif
 }
 #elif SIZEOF_W == 8
 #define BTS(x) (64 * (x))
@@ -69,16 +82,20 @@ static void bn_GF2m_mul_1x1(BN_ULONG *r1, BN_ULONG *r0, const BN_ULONG a, const 
     SQR_tb((w) >> 12 & 0xF) << 24 | SQR_tb((w) >> 8 & 0xF) << 16  | \
     SQR_tb((w) >> 4 & 0xF) << 8   | SQR_tb((w) & 0xF)
 
-gf2m_cmm_mul1x1
-{
+gf2m_cmm_mul1x1 {
     W_ a, b;
     a = R1; b = R2;
     W_ h, l, s;
     W_ a1, a2, a4, a8;
     W_ tab_, top3b;
 
+#ifdef GHCHEAD
+    MAYBE_GC(gf2m_cmm_mul1x1);
+    STK_CHK_GEN(WDS(16), gf2m_cmm_mul1x1);
+#else
     MAYBE_GC(NO_PTRS, gf2m_cmm_mul1x1);
     STK_CHK_GEN(WDS(16), NO_PTRS, gf2m_cmm_mul1x1);
+#endif
 
     tab_ = Sp - WDS(16);
     top3b = a >> 61;
@@ -112,24 +129,32 @@ gf2m_cmm_mul1x1
     if (top3b & 2 > 0) { l = l ^ (b << 62); h = h ^ (b >> 2); }
     if (top3b & 4 > 0) { l = l ^ (b << 63); h = h ^ (b >> 1); }
 
+#ifdef GHCHEAD
+    return(h, l);
+#else
     RET_NN(h,l);
+#endif
 }
 
 #endif
 
 gf2m_cmm_sqr
 {
-    W_ rsz, r, rba, asz, aba, i;
-    asz = R1;
+    W_ asz, aba;
+    asz = R1; aba = R2;
+    W_ rsz, r, rba, i;
     rsz = asz * 2;
+#ifdef GHCHEAD
+    ALLOC_PRIM(SIZEOF_StgArrWords + WDS(rsz));
+#else
     ALLOC_PRIM(SIZEOF_StgArrWords + WDS(rsz), R2_PTR, gf2m_cmm_sqr);
-
+#endif
     r = Hp - SIZEOF_StgArrWords - WDS(rsz-1);
     SET_HDR(r, stg_ARR_WORDS_info, CCCS);
     StgArrWords_bytes(r) = WDS(rsz);
 
     rba = BYTE_ARR_CTS(r);
-    aba = BYTE_ARR_CTS(R2);
+    aba = BYTE_ARR_CTS(aba);
 #define rdp(x) W_[rba + WDS(x)]
 #define adp(x) W_[aba + WDS(x)]
     
@@ -142,14 +167,21 @@ gf2m_cmm_sqr
         goto for;
     }
 
+#ifdef GHCHEAD
+    return(rsz, r);
+#else
     RET_NP(rsz, r);
+#endif
 }
 
 gf2m_cmm_mod {
     W_ rsz, r, asz, aba, j, k, psz, pba;
     asz = R1;
+#ifdef GHCHEAD
+    ALLOC_PRIM(SIZEOF_StgArrWords + WDS(asz));
+#else
     ALLOC_PRIM(SIZEOF_StgArrWords + WDS(asz), R2_PTR & R3_PTR, gf2m_cmm_mod);
-
+#endif
     r = Hp - SIZEOF_StgArrWords - WDS(asz-1);
     SET_HDR(r, stg_ARR_WORDS_info, CCCS);
     StgArrWords_bytes(r) = WDS(rsz);
@@ -235,7 +267,11 @@ gf2m_cmm_mod {
 
 #undef z
 #undef p
+#ifdef GHCHEAD
+    return (j+1, r - SIZEOF_StgArrWords);
+#else
     RET_NP(j + 1, r - SIZEOF_StgArrWords);
+#endif
 }
 
 #define SETUP(p,size) \
@@ -250,11 +286,20 @@ gf2m_cmm_div {
     W_ r;
     top = R5;
     tmp = WDS(top);
+#ifdef GHCHEAD
+    ALLOC_PRIM(SIZEOF_StgArrWords + tmp);
+#else
     ALLOC_PRIM(SIZEOF_StgArrWords + tmp, R2_PTR & R4_PTR & R6_PTR, gf2m_cmm_div);
+#endif
     r = Hp - SIZEOF_StgArrWords - tmp + WDS(1);
     SETUP(r,tmp);
+#ifdef GHCHEAD
+    MAYBE_GC(gf2m_cmm_div);
+    STK_CHK_GEN(3 * tmp, gf2m_cmm_div);
+#else
     MAYBE_GC(R2_PTR & R4_PTR & R6_PTR, gf2m_cmm_div);
     STK_CHK_GEN(3 * tmp, R2_PTR & R4_PTR & R6_PTR, gf2m_cmm_div);
+#endif
     asz = R3;
     pba = BYTE_ARR_CTS(R6);
     aba = BYTE_ARR_CTS(R4);
@@ -369,5 +414,9 @@ gf2m_cmm_div {
             goto cpfin;
         }
     }
+#ifdef GHCHEAD
+    return(top, r);
+#else
     RET_NP(top, r);
+#endif
 }
