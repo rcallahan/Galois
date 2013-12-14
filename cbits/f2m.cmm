@@ -41,10 +41,39 @@ gf2m_cmm_sqr
     SETUP(r, WDS(rsz));
 
 #ifdef GHCHEAD
-    (rsz) = ccall gf2m_sqr(BYTE_ARR_CTS(r) "ptr", asz, BYTE_ARR_CTS(aba) "ptr");
+    ccall gf2m_sqr(BYTE_ARR_CTS(r) "ptr", asz, BYTE_ARR_CTS(aba) "ptr");
     return(rsz, r);
 #else
-    (rsz) = foreign "C" gf2m_sqr(BYTE_ARR_CTS(r) "ptr", asz, BYTE_ARR_CTS(aba) "ptr") [];
+    foreign "C" gf2m_sqr(BYTE_ARR_CTS(r) "ptr", asz, BYTE_ARR_CTS(aba) "ptr") [];
+    RET_NP(rsz, r);
+#endif
+}
+
+#ifdef GHCHEAD
+gf2m_cmm_mul (W_ asz, P_ aba, W_ bsz, P_ bba) {
+#else
+gf2m_cmm_mul
+{
+    W_ asz, aba, bsz, bba;
+    asz = R1; aba = R2; bsz = R3; bba = R4;
+#endif
+    W_ rsz, r;
+    rsz = asz + bsz + 1;
+#ifdef GHCHEAD
+    ALLOC_PRIM_P(SIZEOF_StgArrWords + WDS(rsz), gf2m_cmm_mul, aba & bba);
+#else
+    ALLOC_PRIM(SIZEOF_StgArrWords + WDS(rsz), R2_PTR & R4_PTR, gf2m_cmm_mul);
+#endif
+    r = Hp - SIZEOF_StgArrWords - WDS(rsz-1);
+    SETUP(r, WDS(rsz));
+    aba = BYTE_ARR_CTS(aba);
+    bba = BYTE_ARR_CTS(bba);
+
+#ifdef GHCHEAD
+    ccall gf2m_mul(BYTE_ARR_CTS(r) "ptr", asz, aba "ptr", bsz, bba "ptr");
+    return(rsz, r);
+#else
+    foreign "C" gf2m_mul(BYTE_ARR_CTS(r) "ptr", asz, aba "ptr", bsz, bba "ptr") [];
     RET_NP(rsz, r);
 #endif
 }
