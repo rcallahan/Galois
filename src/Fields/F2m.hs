@@ -59,38 +59,8 @@ f2m_mul :: Integer -> Integer -> Polynomial -> Integer
 f2m_mul a' b' (Polynomial (ByteArray pp) _) = J# sr br where
     !(J# sa# ba#) = ckSmallInt a'
     !(J# sb# bb#) = ckSmallInt b'
-    (# sr, br #) = f2m_mod# sr'# br' pp
-    sa = I# sa#
-    ba = ByteArray ba#
-    sb = I# sb#
-    bb = ByteArray bb#
-    !sr'@(I# sr'#) = sa + sb + 4
-    !(ByteArray br') = runST $ do
-        arr <- newByteArray (sr' * 8)
-        setByteArray arr 0 sr' (0 :: Word)
-        forM_ [0,2..sa-1] $ \j -> do
-            let !(W# a0) = indexByteArray ba j
-                !(W# a1) = if j + 2 <= sa then indexByteArray ba (j + 1) else 0
-            forM_ [0,2..sb-1] $ \i -> do
-                let !(W# b0) = indexByteArray bb i
-                    !(W# b1) = if i + 2 <= sb then indexByteArray bb (i + 1) else 0
-                    !(# r1#, r0# #) = f2m_mul1x1# a0 b0
-                    !(# r3#, r2'# #) = f2m_mul1x1# a1 b1
-                    !(# m1#, m0# #) = f2m_mul1x1# (a1 `xor#` a0) (b1 `xor#` b0)
-                    r2# = r2'# `xor#` m1# `xor#` r1# `xor#` r3#
-                    r3 = W# r3#
-                    r2 = W# r2#
-                    r1 = W# (r3# `xor#` r2# `xor#` r0# `xor#` m1# `xor#` m0#)
-                    r0 = W# r0#
-                d0 <- readByteArray arr (i+j)
-                writeByteArray arr (i+j) (d0 `xor` r0)
-                d1 <- readByteArray arr (i+j+1)
-                writeByteArray arr (i+j+1) (d1 `xor` r1)
-                d2 <- readByteArray arr (i+j+2)
-                writeByteArray arr (i+j+2) (d2 `xor` r2)
-                d3 <- readByteArray arr (i+j+3)
-                writeByteArray arr (i+j+3) (d3 `xor` r3)
-        unsafeFreezeByteArray arr
+    (# sr', br' #) = f2m_mul# sa# ba# sb# bb#
+    (# sr, br #) = f2m_mod# sr' br' pp
 
 f2m_sqr :: Integer -> Polynomial -> Integer
 f2m_sqr a' (Polynomial (ByteArray pp) _) = J# sr br where

@@ -4,164 +4,24 @@
 #define GHCHEAD
 #endif
 
-#define tab(x) W_[tab_ + WDS(x)]
-#define rdp(x) W_[rba + WDS(x)]
-#define adp(x) W_[aba + WDS(x)]
-#define pdp(x) W_[pba + WDS(x)]
-#define bdp(x) W_[bba + WDS(x)]
-#define xdp(x) W_[xba + WDS(x)]
-#define cdp(x) W_[cba + WDS(x)]
-#define udp(x) W_[uba + WDS(x)]
-#define vdp(x) W_[vba + WDS(x)]
-#define BTS(x) (SIZEOF_W * 8 * (x))
-
-#define SQR_tb(w) TO_W_(bits8[sqr_tb+(w)])
-section "rodata" {
-    sqr_tb: bits8[] "\0\1\4\5\x10\x11\x14\x15\x40\x41\x44\x45\x50\x51\x54\x55";
-    // Array literals not supported in cmm at this time
-}
+#define SETUP(p,size) \
+SET_HDR(p, stg_ARR_WORDS_info, CCCS);   \
+StgArrWords_bytes(p) = size;
 
 #ifdef GHCHEAD
 cmm_lzcnt (W_ a) {
-    /* Placeholder for lzcnt or bsr */
-    return(~a);
+    W_ r;
+    (r) = ccall _clz(a);
+    return(r);
 }
 #else
 cmm_lzcnt {
-    RET_N(~R1);
+    W_ r;
+    (r) = foreign "C" _clz(R1) [];
+    RET_N(r);
 }
 #endif
 
-#if SIZEOF_W == 4
-#define SIZEOF_BN 20
-
-#define SQR1(w) \
-    SQR_tb((w) >> 28 & 0xF) << 24 | SQR_tb((w) >> 24 & 0xF) << 16 | \
-    SQR_tb((w) >> 20 & 0xF) <<  8 | SQR_tb((w) >> 16 & 0xF)
-#define SQR0(w) \
-    SQR_tb((w) >> 12 & 0xF) << 24 | SQR_tb((w) >>  8 & 0xF) << 16 | \
-    SQR_tb((w) >>  4 & 0xF) <<  8 | SQR_tb((w)       & 0xF)
-
-#ifdef GHCHEAD
-gf2m_cmm_mul1x1 (W_ a, W_ b) {
-#else
-gf2m_cmm_mul1x1 {
-    W_ a, b;
-    a = R1; b = R2;
-#endif
-    W_ r1, r0, h, l, s;
-    W_ a1, a2, a4;
-    W_ tab_, top2b;
-#ifdef GHCHEAD
-    MAYBE_GC_N(gf2m_cmm_mul1x1, a & b);
-    STK_CHK_GEN_N(WDS(8));
-#else
-    MAYBE_GC(NO_PTRS, gf2m_cmm_mul1x1);
-    STK_CHK_GEN(WDS(8), NO_PTRS, gf2m_cmm_mul1x1);
-#endif
-    tab_ = Sp - 16 * SIZEOF_W;
-    top2b = a >> 30;
-
-    a1 = a & (0x3FFFFFFF); a2 = a1 << 1; a4 = a2 << 1;
-
-    tab(0) =  0; tab(1) = a1;    tab(2) = a2;    tab(3) = a1^a2;
-    tab(4) = a4; tab(5) = a1^a4; tab(6) = a2^a4; tab(7) = a1^a2^a4;
-
-    s = tab(b       & 0x7); l  = s;
-    s = tab(b >>  3 & 0x7); l ^= s <<  3; h  = s >> 29;
-    s = tab(b >>  6 & 0x7); l ^= s <<  6; h ^= s >> 26;
-    s = tab(b >>  9 & 0x7); l ^= s <<  9; h ^= s >> 23;
-    s = tab(b >> 12 & 0x7); l ^= s << 12; h ^= s >> 20;
-    s = tab(b >> 15 & 0x7); l ^= s << 15; h ^= s >> 17;
-    s = tab(b >> 18 & 0x7); l ^= s << 18; h ^= s >> 14;
-    s = tab(b >> 21 & 0x7); l ^= s << 21; h ^= s >> 11;
-    s = tab(b >> 24 & 0x7); l ^= s << 24; h ^= s >>  8;
-    s = tab(b >> 27 & 0x7); l ^= s << 27; h ^= s >>  5;
-    s = tab(b >> 30      ); l ^= s << 30; h ^= s >>  2;
-
-    // compensate for the top two bits of a
-
-    if (top2b & 01) { l ^= b << 30; h ^= b >> 2; } 
-    if (top2b & 02) { l ^= b << 31; h ^= b >> 1; } 
-
-#ifdef GHCHEAD
-    return (h, l);
-#else
-    RET_NN(h,l);
-#endif
-}
-#elif SIZEOF_W == 8
-
-#define SQR1(w) \
-    SQR_tb((w) >> 60 & 0xF) << 56 | SQR_tb((w) >> 56 & 0xF) << 48 | \
-    SQR_tb((w) >> 52 & 0xF) << 40 | SQR_tb((w) >> 48 & 0xF) << 32 | \
-    SQR_tb((w) >> 44 & 0xF) << 24 | SQR_tb((w) >> 40 & 0xF) << 16 | \
-    SQR_tb((w) >> 36 & 0xF) << 8  | SQR_tb((w) >> 32 & 0xF)
-#define SQR0(w) \
-    SQR_tb((w) >> 28 & 0xF) << 56 | SQR_tb((w) >> 24 & 0xF) << 48 | \
-    SQR_tb((w) >> 20 & 0xF) << 40 | SQR_tb((w) >> 16 & 0xF) << 32 | \
-    SQR_tb((w) >> 12 & 0xF) << 24 | SQR_tb((w) >> 8 & 0xF) << 16  | \
-    SQR_tb((w) >> 4 & 0xF) << 8   | SQR_tb((w) & 0xF)
-
-#ifdef GHCHEAD
-gf2m_cmm_mul1x1 (W_ a, W_ b) {
-#else
-gf2m_cmm_mul1x1 {
-    W_ a, b;
-    a = R1; b = R2;
-#endif
-    W_ h, l, s;
-    W_ a1, a2, a4, a8;
-    W_ tab_, top3b;
-
-#ifdef GHCHEAD
-    MAYBE_GC_N(gf2m_cmm_mul1x1, a & b);
-    STK_CHK_GEN_N(WDS(16));
-#else
-    MAYBE_GC(NO_PTRS, gf2m_cmm_mul1x1);
-    STK_CHK_GEN(WDS(16), NO_PTRS, gf2m_cmm_mul1x1);
-#endif
-
-    tab_ = Sp - WDS(16);
-    top3b = a >> 61;
-    a1 = a & (0x1FFFFFFFFFFFFFFF); a2 = a1 << 1; a4 = a2 << 1; a8 = a4 << 1;
-
-    tab(0) = 0; tab(1) = a1; tab(2) = a2; tab(3) = a1^a2;
-    tab(4) = a4; tab(5) = a1^a4; tab(6) = a2^a4; tab(7) = a1^a2^a4;
-    tab(8) = a8; tab(9) = a1^a8; tab(10) = a2^a8; tab(11) = a1^a2^a8;
-    tab(12) = a4^a8; tab(13) = a1^a4^a8; tab(14) = a2^a4^a8; tab(15) = a1^a2^a4^a8;
-
-    s = tab(b & 0xF); l = s;
-    s = tab(b >> 4 & 0xF); l = l ^ (s << 4); h = s >> 60;
-    s = tab(b >> 8 & 0xF); l = l ^ (s << 8); h = h ^ (s >> 56);
-    s = tab(b >> 12 & 0xF); l = l ^ (s << 12); h = h ^ (s >> 52);
-    s = tab(b >> 16 & 0xF); l = l ^ (s << 16); h = h ^ (s >> 48);
-    s = tab(b >> 20 & 0xF); l = l ^ (s << 20); h = h ^ (s >> 44);
-    s = tab(b >> 24 & 0xF); l = l ^ (s << 24); h = h ^ (s >> 40);
-    s = tab(b >> 28 & 0xF); l = l ^ (s << 28); h = h ^ (s >> 36);
-    s = tab(b >> 32 & 0xF); l = l ^ (s << 32); h = h ^ (s >> 32);
-    s = tab(b >> 36 & 0xF); l = l ^ (s << 36); h = h ^ (s >> 28);
-    s = tab(b >> 40 & 0xF); l = l ^ (s << 40); h = h ^ (s >> 24);
-    s = tab(b >> 44 & 0xF); l = l ^ (s << 44); h = h ^ (s >> 20);
-    s = tab(b >> 48 & 0xF); l = l ^ (s << 48); h = h ^ (s >> 16);
-    s = tab(b >> 52 & 0xF); l = l ^ (s << 52); h = h ^ (s >> 12);
-    s = tab(b >> 56 & 0xF); l = l ^ (s << 56); h = h ^ (s >> 8);
-    s = tab(b >> 60 ); l = l ^ (s << 60); h = h ^ (s >> 4);
-#undef tab
-    // compensate for the top three bits of a
-
-    if (top3b & 1 > 0) { l = l ^ (b << 61); h = h ^ (b >> 3); }
-    if (top3b & 2 > 0) { l = l ^ (b << 62); h = h ^ (b >> 2); }
-    if (top3b & 4 > 0) { l = l ^ (b << 63); h = h ^ (b >> 1); }
-
-#ifdef GHCHEAD
-    return(h, l);
-#else
-    RET_NN(h,l);
-#endif
-}
-
-#endif
 #ifdef GHCHEAD
 gf2m_cmm_sqr (W_ asz, P_ aba) {
 #else
@@ -178,24 +38,13 @@ gf2m_cmm_sqr
     ALLOC_PRIM(SIZEOF_StgArrWords + WDS(rsz), R2_PTR, gf2m_cmm_sqr);
 #endif
     r = Hp - SIZEOF_StgArrWords - WDS(rsz-1);
-    SET_HDR(r, stg_ARR_WORDS_info, CCCS);
-    StgArrWords_bytes(r) = WDS(rsz);
-
-    rba = BYTE_ARR_CTS(r);
-    aba = BYTE_ARR_CTS(aba);
-    
-    i = 0;
-    for:
-    if (i < asz) {
-        rdp(2*i + 1) = SQR1(adp(i));
-        rdp(2*i) = SQR0(adp(i));
-        i = i + 1;
-        goto for;
-    }
+    SETUP(r, WDS(rsz));
 
 #ifdef GHCHEAD
+    (rsz) = ccall gf2m_sqr(BYTE_ARR_CTS(r) "ptr", asz, BYTE_ARR_CTS(aba) "ptr");
     return(rsz, r);
 #else
+    (rsz) = foreign "C" gf2m_sqr(BYTE_ARR_CTS(r) "ptr", asz, BYTE_ARR_CTS(aba) "ptr") [];
     RET_NP(rsz, r);
 #endif
 }
@@ -209,111 +58,27 @@ gf2m_cmm_mod {
     asz = R1; aba = R2; pba = R3;
     ALLOC_PRIM(SIZEOF_StgArrWords + WDS(asz), R2_PTR & R3_PTR, gf2m_cmm_mod);
 #endif
-    W_ rsz, r, j, k, psz;
+    W_ rsz, r, psz;
     r = Hp - SIZEOF_StgArrWords - WDS(asz-1);
-    SET_HDR(r, stg_ARR_WORDS_info, CCCS);
-    StgArrWords_bytes(r) = WDS(asz);
+    SETUP(r, WDS(asz));
 
     psz = StgArrWords_bytes(pba)/WDS(1);
-    aba = BYTE_ARR_CTS(aba);
-    pba = BYTE_ARR_CTS(pba);
-    r = BYTE_ARR_CTS(r);
 
-    j = 0;
-#define z(x) W_[r+WDS((x))]
-#define p(x) W_[pba+WDS((x))]
-    cp_loop:
-    if (j < asz) {
-        z(j) = W_[aba+WDS(j)];
-        j = j + 1;
-        goto cp_loop;
-    }
-
-    W_ p0, n, dN, d0, d1, zz, tmp;
-    
-    p0 = p(0);
-    dN = p0/BTS(1);
-
-    j = asz - 1;
-    outer_loop:
-    if (j > dN) {
-        zz = z(j);
-        if (zz == 0) {
-            j = j - 1;
-            goto outer_loop;
-        }
-        z(j) = 0;
-
-        k = 1;
-        inner_loop:
-        if (k < psz) {
-            n = p0 - p(k);
-            d0 = n % BTS(1); d1 = BTS(1) - d0;
-            n = n / BTS(1);
-            z(j-n) = z(j-n) ^ (zz>>d0);
-            if (d0>0) {z(j-n-1) = z(j-n-1) ^ (zz<<d1);}
-            k = k + 1;
-            goto inner_loop;
-        }
-        goto outer_loop;
-    }
-
-    if (j != dN) {goto brk1;}
-
-    psz = psz - 1;
-    while:
-        d0 = p0 % BTS(1);
-        zz = z(dN) >> d0;
-        if (zz==0) {goto brk1;}
-        d1 = BTS(1) - d0;
-        if (d0 > 0) { z(dN) = (z(dN) << d1) >> d1;}
-        else {z(dN) = 0;}
-        z(0) = z(0) ^ zz;
-
-        k = 1;
-        xor_loop:
-        if (k < psz) {
-            n = p(k) / BTS(1);
-            d0 = p(k) % BTS(1);
-            d1 = BTS(1) - d0;
-            z(n) = z(n) ^ (zz << d0);
-            tmp = zz >> d1;
-            if (d0 > 0) { if (tmp > 0) {z(n+1) = z(n+1) ^ tmp;}}
-            k = k + 1;
-            goto xor_loop;
-        }
-        goto while;
-
-    brk1:
-
-    j = asz-1;
-    find_top:
-    if (z(j) == 0) {
-        j = j-1;
-        goto find_top;
-    }
-
-#undef z
-#undef p
 #ifdef GHCHEAD
-    return(j+1, r-SIZEOF_StgArrWords);
+    (rsz) = ccall gf2m_mod(BYTE_ARR_CTS(r) "ptr", asz, BYTE_ARR_CTS(aba) "ptr", psz, BYTE_ARR_CTS(pba) "ptr");
+    return(rsz, r);
 #else
-    RET_NP(j + 1, r - SIZEOF_StgArrWords);
+    (rsz) = foreign "C" gf2m_mod(BYTE_ARR_CTS(r) "ptr", asz, BYTE_ARR_CTS(aba) "ptr", psz, BYTE_ARR_CTS(pba) "ptr") [];
+    RET_NP(rsz, r);
 #endif
 }
 
-#define SETUP(p,size) \
-SET_HDR(p, stg_ARR_WORDS_info, CCCS);   \
-StgArrWords_bytes(p) = size;
 
 #ifdef GHCHEAD
 gf2m_cmm_div (W_ xsz, P_ xba, W_ asz, P_ aba, W_ top, P_ pba) {
     W_ tmp;
     tmp = WDS(top);
     ALLOC_PRIM_P(SIZEOF_StgArrWords + tmp, gf2m_cmm_div, xba & aba & pba );
-    pba = BYTE_ARR_CTS(pba);
-    aba = BYTE_ARR_CTS(aba);
-    xba = BYTE_ARR_CTS(xba);
 #else
 gf2m_cmm_div {
     W_ asz, aba, xsz, xba, top, pba; // inputs and outputs
@@ -322,124 +87,27 @@ gf2m_cmm_div {
     tmp = WDS(top);
     ALLOC_PRIM(SIZEOF_StgArrWords + tmp, R2_PTR & R4_PTR & R6_PTR, gf2m_cmm_div);
 #endif
-    pba = BYTE_ARR_CTS(R6);
-    aba = BYTE_ARR_CTS(R4);
-    xba = BYTE_ARR_CTS(R2);
-    W_ r, bba, cba, uba, vba, tmp2;
+    W_ rsz, r, bba;
+    pba = BYTE_ARR_CTS(pba);
+    aba = BYTE_ARR_CTS(aba);
+    xba = BYTE_ARR_CTS(xba);
+
     r = Hp - SIZEOF_StgArrWords - tmp + WDS(1);
     SETUP(r,tmp);
+
 #ifdef GHCHEAD
-    MAYBE_GC_N(gf2m_cmm_div, R2_PTR & R4_PTR & R6_PTR);//gf2m_cmm_div);
-    STK_CHK_GEN_N(3 * tmp);
+    MAYBE_GC_N(gf2m_cmm_div, R2_PTR & R4_PTR & R6_PTR);
 #else
     MAYBE_GC(R2_PTR & R4_PTR & R6_PTR, gf2m_cmm_div);
-    STK_CHK_GEN(3 * tmp, R2_PTR & R4_PTR & R6_PTR, gf2m_cmm_div);
 #endif
-    cba = Sp - tmp; uba = cba - tmp; vba = uba - tmp;
+
     bba = BYTE_ARR_CTS(r);
 
-    W_ i, ubits, vbits;
-
-    i = 0;
-    zero_loop:
-    if (i < top) {
-        if (i < xsz) { bdp(i) = xdp(i);}
-        else {bdp(i) = 0;}
-        cdp(i) = 0;
-        if (i < asz) { udp(i) = adp(i); }
-        else { udp(i) = 0;}
-        vdp(i) = pdp(i);
-        i = i + 1;
-        goto zero_loop;
-    }
-
-    vbits = 0;
-    i = top - 1;
-    vbitsize:
-    if (i >= 0) {
-        // The following instruction is a placeholder for lzcnt or bsr
-        tmp = ~vdp(i);
-        vbits = vbits + tmp;
-        if (tmp == BTS(1)) {
-            i = i - 1;
-            goto vbitsize;}
-        else {vbits = BTS(top) - vbits;}
-    }
-
-    ubitsize:
-    ubits = 0;
-    i = top - 1;
-    ubitloop:
-    if (i >= 0) {
-        // The following instruction is a placeholder for lzcnt or bsr
-        tmp = ~udp(i);
-        ubits = ubits + tmp;
-        if (tmp == BTS(1)) {
-            i = i - 1;
-            goto ubitloop;}
-        else {ubits = BTS(top) - ubits;}
-    }
-
-    W_ u0, u1, b0, b1, mask;
-    outer:
-        u0 = udp(0);
-        if (ubits > 0) {if (0==(u0&1)) {
-            b0 = bdp(0);
-            mask = 0-(b0&1);
-            b0 = b0 ^ (pdp(0)&mask);
-            i = 0;
-            inner:
-            if (i < (top-1)) {
-                u1 = udp(i+1);
-                udp(i) = (u0>>1)|(u1<<(BTS(1)-1));
-                u0 = u1;
-                b1 = bdp(i+1) ^ (pdp(i+1)&mask);
-                bdp(i) = (b0>>1)|(b1<<(BTS(1)-1));
-                b0 = b1;
-                i = i + 1;
-                goto inner;
-            }
-            udp(i) = u0 >> 1;
-            bdp(i) = b0 >> 1;
-            ubits = ubits - 1;
-            goto outer;
-        }}
-
-        if (ubits <= BTS(1)) {if (udp(0) == 1) {goto brkloop;}}
-
-        if (ubits < vbits) {
-            tmp = ubits; ubits = vbits; vbits = tmp;
-            tmp = uba; uba = vba; vba = tmp;
-            tmp = bba; bba = cba; cba = tmp;
-        }
-
-        i = 0;
-        smalloop:
-        if (i < top) {
-            udp(i) = udp(i) ^ vdp(i);
-            bdp(i) = bdp(i) ^ cdp(i);
-            i = i + 1;
-            goto smalloop;
-        }
-
-        if (ubits == vbits) { goto ubitsize; }
-
-        goto outer;
-
-    brkloop:
-
-    if (bba - SIZEOF_StgArrWords != r) {
-        i = 0;
-        cpfin:
-        if (i < top) {
-            cdp(i) = bdp(i);
-            i = i + 1;
-            goto cpfin;
-        }
-    }
 #ifdef GHCHEAD
-    return(top, r);
+    (rsz) = ccall gf2m_div(bba "ptr", xsz, xba "ptr", asz, aba "ptr", top, pba "ptr");
+    return(rsz, r);
 #else
-    RET_NP(top, r);
+    (rsz) = foreign "C" gf2m_div(bba "ptr", xsz, xba "ptr", asz, aba "ptr", top, pba "ptr") [];
+    RET_NP(rsz, r);
 #endif
 }
