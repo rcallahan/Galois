@@ -1,6 +1,7 @@
 {-# LANGUAGE MagicHash, UnboxedTuples, BangPatterns #-}
 module Fields.F2m 
     ( f2m_mul
+    , f2m_mod
     , f2m_exp
     , f2m_inv
     , f2m_sqr

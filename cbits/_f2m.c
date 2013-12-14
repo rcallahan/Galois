@@ -64,6 +64,9 @@ void gf2m_mul(ulong *r, const size_t asz, const ulong *a, const size_t bsz, cons
     int i, j;
     ulong tab[16];
 
+    for (i=0; i<(asz+bsz+1); i++)
+        r[i] = 0;
+
     ulong x, y;
     for (i=0; i<asz; i++) {
         x = a[i];
